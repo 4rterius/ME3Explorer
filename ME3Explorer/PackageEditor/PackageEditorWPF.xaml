@@ -287,6 +287,7 @@
                     </MenuItem>
                     <MenuItem Header="Other people's box of Legos">
                         <MenuItem Header="Export level to T3D" Click="ExportLevelToT3D_Click"/>
+                        <MenuItem Header="4rt: Copy+Compact a level" Click="CopyCompactLvl_Click"/>
                     </MenuItem>
                 </MenuItem>
             </Menu>

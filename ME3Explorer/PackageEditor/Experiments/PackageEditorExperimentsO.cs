@@ -1,12 +1,19 @@
-﻿using ME3ExplorerCore.Packages;
+﻿using ME3Explorer.SharedUI;
+using ME3ExplorerCore.Gammtek.Extensions.Collections.Generic;
+using ME3ExplorerCore.Helpers;
+using ME3ExplorerCore.Packages;
+using ME3ExplorerCore.Packages.CloningImportingAndRelinking;
 using ME3ExplorerCore.SharpDX;
+using ME3ExplorerCore.Unreal;
 using ME3ExplorerCore.Unreal.BinaryConverters;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
 
 namespace ME3Explorer.PackageEditor.Experiments
 {
@@ -203,6 +210,91 @@ namespace ME3Explorer.PackageEditor.Experiments
                 Writer.WriteLine("-------------------------------------------------------");
             }
             Writer.Close();
+        }
+
+        public static bool TryAddToPersistentLevelStatic(IMEPackage pcc, IEnumerable<IEntry> newEntries, bool quietOnSuccess = false)
+        {
+            ExportEntry[] actorsToAdd = newEntries.OfType<ExportEntry>()
+                .Where(exp => exp.Parent?.ClassName == "Level" && exp.IsA("Actor")).ToArray();
+            int num = actorsToAdd.Length;
+            if (num > 0 && pcc.AddToLevelActorsIfNotThere(actorsToAdd))
+            {
+                if (!quietOnSuccess)
+                {
+                    MessageBox.Show(
+                        $"Added actor{(num > 1 ? "s" : "")} to PersistentLevel's Actor list:\n{actorsToAdd.Select(exp => exp.ObjectName.Instanced).StringJoin("\n")}");
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        public static void CopyCompactLevel(PackageEditorWPF winOwner, IMEPackage targetPackage, List<String> sourcePaths, bool quietOnSuccess = false)
+        {
+            var acceptableClasses = new string[]
+            {
+                    "StaticMeshActor",
+                    "StaticMeshCollectionActor",
+                    "StaticLightCollectionActor",
+                    "BlockingVolume",
+                    "DecalActor",
+                    "HeightFog",
+                    "LightVolume",
+                    "LightMapTexture2D",
+                    "ShadowMapTexture2D",
+                    "Emitter",
+                    "LensFlareSource",
+                    "LightmassImportanceVolume",
+                    "PostProcessVolume"
+            };
+
+
+            var origWinTitle = winOwner.Title;
+
+            var targetPersistentLevel = targetPackage.Exports.Where(e => e.ObjectNameString == "PersistentLevel").First();
+
+            using var sources = MEPackageHandler.OpenMEPackages(sourcePaths);
+            int sourceCounter = 0;
+            foreach (var source in sources)
+            {
+                sourceCounter++;
+
+                var persistentLevel = source.Exports.Where(e => e.ObjectNameString == "PersistentLevel").First();
+                var interestingEntries = persistentLevel.GetChildren().Where(e => acceptableClasses.Contains(e.ClassName));
+
+                int entryCounter = 0;
+                foreach (var entry in interestingEntries)
+                {
+                    entryCounter++;
+                    int numExports = targetPackage.ExportCount;
+                    var relinkResults = EntryImporter.ImportAndRelinkEntries(EntryImporter.PortingOption.CloneAllDependencies,
+                        entry, targetPackage, targetPersistentLevel, true,
+                        out var newEntry, null, (s => Debug.WriteLine(s)));
+
+                    TryAddToPersistentLevelStatic(targetPackage, targetPackage.Exports.Skip(numExports), quietOnSuccess);
+                    if ((relinkResults?.Count ?? 0) > 0)
+                    {
+                        ListDialog ld = new ListDialog(relinkResults, "Relink report",
+                            "The following items failed to relink. RETURNING.", winOwner);
+                        ld.Show();
+                        throw new Exception("something went wrong!!!");
+                    }
+                    else if (!quietOnSuccess)
+                    {
+                        MessageBox.Show(
+                            "Items have been ported and relinked with no reported issues.\nNote that this does not mean all binary properties were relinked, only supported ones were."
+                            + $"\nProgress = {entryCounter}/{interestingEntries.Count()} of {sourceCounter}/{sources.Count()}");
+                    }
+
+                    Application.Current.Dispatcher.Invoke(() => {
+                        winOwner.Title = $"{winOwner} - {entryCounter}/{interestingEntries.Count()} of {sourceCounter}/{sources.Count()}";
+                    });
+                }
+            }
+
+            winOwner.Title = origWinTitle;
         }
     }
 }

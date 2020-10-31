@@ -4802,5 +4802,25 @@ namespace ME3Explorer
         {
             PackageEditorExperimentsM.PortME1EntryMenuToME3ViaBioPChar(Pcc);
         }
+
+        private void CopyCompactLvl_Click(object sender, RoutedEventArgs e)
+        {
+            var sources = new List<string>();
+            sources.AddRange(new string[] {
+                "BioA_Gth001",
+                "BioA_Gth001_000Global",
+                "BioA_Gth001_500MainGun",
+                "BioA_Gth001_520MainGunL",
+                "BioA_Gth001_540MainGunR",
+                "BioD_Gth001_500MainGun",
+                "BioD_Gth001_520MainGunR",
+                "BioD_Gth001_540MainGunL",
+            });
+
+            sources = sources.Select(s => $"{ME3Directory.cookedPath}{s}.pcc").ToList();
+
+            PackageEditorExperimentsO.CopyCompactLevel(this, Pcc, sources, quietOnSuccess: true);
+            RefreshView();
+        }
     }
 }
